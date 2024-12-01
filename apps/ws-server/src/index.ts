@@ -1,8 +1,5 @@
 import WebSocket from "ws";
-import {
-  decodeToken,
-  displaySheetANdUser,
-} from "./utils";
+import { decodeToken, displaySheetANdUser } from "./utils";
 import { redisClient } from "./utils";
 
 const wss = new WebSocket.Server({ port: 8081, host: "localhost" });
@@ -18,10 +15,11 @@ let sheetMap = new Map<string, MyWebSocket[]>();
 enum MESSAGE_TYPE {
   JOIN = "join",
   SERVER = "server",
-  LEAVE = "leave",
   ERROR = "error",
   RESPONSE = "response",
+  LEAVE = "leave",
   UPDATE = "update",
+  CURSOR_UPDATE = "cursorUpdate",
 }
 
 export interface MyWebSocket extends WebSocket {
@@ -247,18 +245,9 @@ async function broadcastMessage(
   }
 }
 
-async function handleUpdate(data:any, ws:MyWebSocket) {
-  //need to implement this 
-  
+async function handleUpdate(data: any, ws: MyWebSocket) {
+  //need to implement this
   //implement CRDT
-
-
-
-
-
-
-
-
 }
 
 wss.on("connection", (ws: MyWebSocket) => {

@@ -5,6 +5,8 @@ import { WS_URL } from "../../config/constants";
 import docAPi from "../../services/mockApi";
 
 import { Document } from "../../types/auth";
+import { useEditor, EditorContent } from "@tiptap/react";
+import { TextSelection, Transaction } from "prosemirror-state";
 
 enum MESSAGE_TYPE {
   JOIN = "join",
@@ -49,8 +51,12 @@ export default function DocumentEditor() {
   const [content, setContent] = useState("");
   const [socket, setSocket] = useState<WebSocket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+  const [txnExample, setTxnExample] = useState<Transaction[] | null>(null);
+
+  const extensions = [StarterKit];
 
   async function getDocData(documentId: string) {
+    console.log("Fetching document data...", canEdit, socket, extensions);
     try {
       const docData = await docAPi.getDoc(documentId);
       if (!docData) {
@@ -65,7 +71,6 @@ export default function DocumentEditor() {
   }
 
   useEffect(() => {
-
     const initializeUserSession = () => {
       const token = localStorage.getItem("token");
       const authData = localStorage.getItem("user");
@@ -139,13 +144,6 @@ export default function DocumentEditor() {
     };
   };
 
-  useEffect(() => {
-    // Continuously update cursors for active users
-    // displayCursors();
-
-    
-  }, [activeUsers]);
-
   const handleWebSocketMessage = (data: any) => {
     const { type, data: messageData } = data;
 
@@ -199,6 +197,42 @@ export default function DocumentEditor() {
     );
   };
 
+  const editor = useEditor({
+    extensions: [StarterKit],
+
+    content: doc?.content || "Hello",
+
+    onUpdate({ editor, transaction }) {
+      const cursor = editor.state.selection.toJSON();
+
+      const cursorLine = editor.state.selection.content().toJSON();
+
+      console.log("cursorLine:", cursorLine);
+
+      console.log("Cursor position", cursor);
+
+      //   const res = editor.state.selection.toJSON();
+
+      //   console.log("res:", res);
+    },
+
+    onTransaction({ editor, transaction }) {
+      console.log("Transaction:", transaction.steps);
+
+      //push transaction to the state
+
+      setTxnExample((prevTxn) => {
+        {
+          if (!prevTxn) {
+            return [transaction];
+          } else {
+            return [...prevTxn, transaction];
+          }
+        }
+      });
+    },
+  });
+
   return (
     <div className="flex flex-col min-h-screen bg-gray-900">
       <header className="bg-gray-800 shadow-lg p-4">
@@ -213,7 +247,11 @@ export default function DocumentEditor() {
             <div className="flex items-center space-x-2">
               {activeUsers.map((user) => (
                 <div
-       
+                  onClick={() => {
+                    setTimeout(() => {
+                      if (!txnExample) return;
+                    }, 2000);
+                  }}
                   key={user.id}
                   className={`px-3 py-1 rounded-full text-sm ${
                     user.id === myUser?.id
@@ -234,6 +272,87 @@ export default function DocumentEditor() {
           </div>
         </div>
       </header>
+      <main className="flex-1 p-4">
+        <div className="max-w-4xl mx-auto bg-gray-800 rounded-lg shadow-lg p-4 relative">
+          {editor && (
+            <>
+              <EditorContent editor={editor} className="prose max-w-none" />
+            </>
+          )}
+
+          <style>{`
+            /* Remove default outline */
+            .ProseMirror {
+              min-height: 200px;
+              outline: none !important;
+              background-color: #1f2937; /* bg-gray-800 */
+              color: white; /* White text */
+            }
+
+            /* Style the editor content */
+            .ProseMirror p {
+              margin: 1em 0;
+            }
+
+            /* Style headings */
+            .ProseMirror h1 {
+              font-size: 2em;
+              font-weight: bold;
+              margin: 1em 0;
+            }
+
+            .ProseMirror h2 {
+              font-size: 1.5em;
+              font-weight: bold;
+              margin: 1em 0;
+            }
+
+            /* Style lists */
+            .ProseMirror ul,
+            .ProseMirror ol {
+              padding-left: 2em;
+              margin: 1em 0;
+            }
+
+            /* Style links */
+            .ProseMirror a {
+              color: #3b82f6; /* Same as before */
+              text-decoration: underline;
+            }
+
+            /* Custom styling for focused state */
+            .ProseMirror:focus {
+              box-shadow: none; /* Remove focus border shadow */
+              border-radius: 4px;
+            }
+
+            /* Style code blocks */
+            .ProseMirror pre {
+              background-color: #374151; /* Darker gray for code blocks */
+              padding: 1em;
+              border-radius: 4px;
+              margin: 1em 0;
+              color: #e5e7eb; /* Light gray text */
+            }
+
+            /* Style inline code */
+            .ProseMirror code {
+              background-color: #374151; /* Darker gray for inline code */
+              padding: 0.2em 0.4em;
+              border-radius: 4px;
+              color: #e5e7eb; /* Light gray text */
+            }
+
+            /* Style blockquotes */
+            .ProseMirror blockquote {
+              border-left: 4px solid #4b5563; /* Gray border */
+              padding-left: 1em;
+              margin: 1em 0;
+              color: #d1d5db; /* Light gray text */
+            }
+          `}</style>
+        </div>
+      </main>
     </div>
   );
 }
