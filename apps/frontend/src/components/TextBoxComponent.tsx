@@ -1,89 +1,51 @@
-import { useEditor, EditorContent, Editor } from "@tiptap/react";
+import {
+  BubbleMenu,
+  EditorContent,
+  FloatingMenu,
+  useEditor,
+} from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { useEffect, useState } from "react";
+import React from "react";
 
-const extensions = [StarterKit];
-
-const content = "<p>Hello World!</p>";
-
-const TextBoxComponent = () => {
-  const [socket, setSocket] = useState<WebSocket | null>(null);
-
+const TextBoxComponent: React.FC = () => {
   const editor = useEditor({
-    onTransaction: (d) => {
-      const data = JSON.stringify(d.transaction);
-      // const res = parseEditorJSON(data);
-      console.log(data);
+    extensions: [StarterKit],
+
+    editorProps: {
+      attributes: {
+        class:
+          "prose prose-sm sm:prose lg:prose-lg xl:prose-2xl mx-auto focus:outline-none",
+      },
     },
-
-    extensions,
-    content,
   });
-
-  useEffect(() => {
-    const ws = new WebSocket("ws://localhost:8081");
-
-    ws.onopen = () => {
-      console.log("Connected to the WS Server");
-
-      ws.send(
-        JSON.stringify({
-          type: "join",
-          data: {
-            token: "123dsads",
-            sheetId: "456",
-          },
-        })
-      );
-
-      setSocket(ws);
-    };
-
-    ws.onmessage = (message) => {
-      console.log(message.data);
-    };
-
-    ws.onclose = () => {
-      console.log("Disconnected from the WS Server");
-    };
-
-    return () => {
-      ws.close();
-      setSocket(null);
-    };
-  }, []);
-
-  function sendContent(editor: Editor | null) {
-    if (!socket) {
-      return;
-    }
-
-    socket.send(
-      JSON.stringify({
-        type: "content",
-        data: {
-          content: editor?.getHTML() || "",
-        },
-      })
-    );
-  }
 
   if (!editor) {
-    return <div>Loading </div>;
+    return null;
   }
 
-  editor.on("update", () => {
-    console.log("Editor content updated", editor.getJSON());
-    sendContent(editor);
-  });
-
   return (
-    <>
-      {/* <MenuBar editor={editor} /> */}
-      <div className="editor-container w-full h-screen  border-2 border-gray-200 overflow-scroll">
-        <EditorContent editor={editor} />
-      </div>
-    </>
+    <div className="relative  min-h-[200px] w-full max-w-screen-lg mx-auto p-4">
+      <EditorContent
+        editor={editor}
+        className="min-h-[200px] w-full border rounded-lg p-4"
+      />
+      {editor && (
+        <>
+          <FloatingMenu
+            editor={editor}
+            className="bg-white shadow-lg rounded-lg p-2"
+          >
+            This is the floating menu
+          </FloatingMenu>
+          <BubbleMenu
+            editor={editor}
+            className="bg-white shadow-lg rounded-lg p-2"
+          >
+            This is the bubble menu
+          </BubbleMenu>
+        </>
+      )}
+    </div>
   );
 };
 

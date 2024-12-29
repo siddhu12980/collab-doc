@@ -1,9 +1,12 @@
+import "./App.css";
 import AppRoutes from "./routes/index.route";
 
-export default function App() {
+function App() {
   return (
     <div>
       <AppRoutes />
     </div>
   );
 }
+
+export default App;

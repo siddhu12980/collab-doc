@@ -11,7 +11,7 @@ enum EDIT_TYPE {
 export async function Signin(req: Request, res: Response) {
   console.log("Signin");
   try {
-    const body = req.body;
+    const body = req.body
 
     const { email, password } = body;
 

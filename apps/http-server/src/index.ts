@@ -12,7 +12,7 @@ import {
   Signin,
   Signup,
   updateSheet,
-} from "./utils ";
+} from "./utils";
 import { token } from "./middelware/token";
 
 dotenv.config();

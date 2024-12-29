@@ -1,13 +1,19 @@
-// Import everything from react-router-dom
 import SignIn from "../components/auth/SignIn";
 import SignUp from "../components/auth/SignUp";
 import HomePage from "../components/home/HomePage";
 import DocumentEditor from "../components/editor/DocumentEditor";
-import { Route, BrowserRouter, Routes } from "react-router-dom";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
 
-export default function AppRoutes() {
+const AppRoutes = () => {
   // TODO: Implement actual auth state management
-  const isAuthenticated = false;
+  let isAuthenticated = false;
+
+  const token = localStorage.getItem("token");
+  const user = localStorage.getItem("user");
+
+  if (token && user) {
+    isAuthenticated = true;
+  }
 
   return (
     <div>
@@ -25,4 +31,6 @@ export default function AppRoutes() {
       </BrowserRouter>
     </div>
   );
-}
+};
+
+export default AppRoutes;

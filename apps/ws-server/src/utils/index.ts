@@ -1,5 +1,5 @@
 import jwt from "jsonwebtoken";
-import prisma from "@repo/db";
+
 import { MyWebSocket } from "..";
 
 export async function decodeToken(token: string): Promise<any> {

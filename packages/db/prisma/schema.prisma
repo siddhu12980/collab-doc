@@ -50,4 +50,5 @@ model Event {
 enum EditType {
   INSERT
   DELETE
+  UPDATE
 }

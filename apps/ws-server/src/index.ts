@@ -1,7 +1,13 @@
 import WebSocket from "ws";
 import { decodeToken, displaySheetANdUser } from "./utils";
 
-const wss = new WebSocket.Server({ port: 8081 });
+const wss = new WebSocket.Server({ port: 8081, host: "localhost" });
+
+console.log(
+  "WebSocket server started url:",
+  wss.options.host,
+  wss.options.port
+);
 
 let sheetMap = new Map<string, MyWebSocket[]>();
 
@@ -13,6 +19,7 @@ enum MESSAGE_TYPE {
   RESPONSE = "response",
   UPDATE = "update",
 }
+
 
 export interface MyWebSocket extends WebSocket {
   userId?: string;

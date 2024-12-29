@@ -1,6 +1,5 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { EditorContent, Editor ,useEditor} from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { WS_URL } from "../../config/constants";
 import docAPi from "../../services/mockApi";
@@ -34,18 +33,8 @@ export default function DocumentEditor() {
 
   const extensions = [StarterKit];
 
-  const editor = useEditor({
-    onTransaction: (d) => {
-      const data = JSON.stringify(d.transaction);
-      // const res = parseEditorJSON(data);
-      console.log(data);
-    },
-
-    extensions,
-    content,
-  });
-
   async function getDocData(documentId: string) {
+    console.log("Fetching document data...", canEdit, socket, extensions);
     try {
       const docData = await docAPi.getDoc(documentId);
       if (!docData) {
@@ -133,7 +122,6 @@ export default function DocumentEditor() {
     };
   };
 
-  // Handle WebSocket messages
   const handleWebSocketMessage = (data: any) => {
     const { type, data: messageData } = data;
 
@@ -151,6 +139,7 @@ export default function DocumentEditor() {
         if (messageData.type === MESSAGE_TYPE.JOIN) {
           handleJoin(messageData);
         }
+        console.log("Server message:", messageData);
         break;
 
       case MESSAGE_TYPE.ERROR:
@@ -192,42 +181,6 @@ export default function DocumentEditor() {
     }
   };
 
-  // // Handle text changes
-  // const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-  //   const newContent = e.target.value;
-  //   setContent(newContent);
-
-  //   const updatedContent = e.target.value;
-
-  //   const selectionStart = e.target.selectionStart;
-
-  //   const lines = updatedContent.slice(0, selectionStart).split("\n");
-  //   const lineNumber = lines.length; // Line number starts from 1
-  //   const colNumber = lines[lines.length - 1].length + 1; // Column number starts from 1
-
-  //   console.log("Updated Content:", updatedContent);
-  //   console.log("Line Number:", lineNumber);
-  //   console.log("Column Number:", colNumber);
-
-  //   if (socket?.readyState === WebSocket.OPEN) {
-  //     console.log("Sending update to server", newContent);
-  //     socket.send(
-  //       JSON.stringify({
-  //         type: MESSAGE_TYPE.UPDATE,
-  //         data: {
-  //           content: newContent,
-  //         },
-  //       })
-  //     );
-  //   }
-  // };
-
-  if (!editor) {
-    return <div>Loading </div>;
-  }
-
-
-
   return (
     <div className="flex flex-col min-h-screen bg-gray-900">
       <header className="bg-gray-800 shadow-lg p-4">
@@ -263,25 +216,7 @@ export default function DocumentEditor() {
         </div>
       </header>
 
-      <main className="flex-1 p-4">
-        <div className="max-w-4xl mx-auto h-full">
-          {/*          
-          <textarea
-            value={content}
-            onChange={handleChange}
-            disabled={!canEdit}
-            className={`w-full h-[calc(100vh-12rem)] p-4 rounded-lg resize-none 
-              ${
-                canEdit
-                  ? "bg-gray-800 text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                  : "bg-gray-700 text-gray-400 cursor-not-allowed"
-              }`}
-            placeholder={canEdit ? "Start typing..." : "Connecting..."}
-          /> */}
-
-          <EditorContent editor={editor} />
-        </div>
-      </main>
+      <div className="max-w-4xl mx-auto h-full"></div>
     </div>
   );
 }

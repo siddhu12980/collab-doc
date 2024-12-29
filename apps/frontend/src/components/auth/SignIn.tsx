@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { LogIn, LogInIcon } from "lucide-react";
+import { LogIn } from "lucide-react";
 import axios from "axios";
 
 const baseURL = "http://localhost:3000";
