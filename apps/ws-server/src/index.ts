@@ -1,5 +1,9 @@
 import WebSocket from "ws";
-import { decodeToken, displaySheetANdUser } from "./utils";
+import {
+  decodeToken,
+  displaySheetANdUser,
+} from "./utils";
+import { redisClient } from "./utils";
 
 const wss = new WebSocket.Server({ port: 8081, host: "localhost" });
 
@@ -19,7 +23,6 @@ enum MESSAGE_TYPE {
   RESPONSE = "response",
   UPDATE = "update",
 }
-
 
 export interface MyWebSocket extends WebSocket {
   userId?: string;
@@ -244,6 +247,20 @@ async function broadcastMessage(
   }
 }
 
+async function handleUpdate(data:any, ws:MyWebSocket) {
+  //need to implement this 
+  
+  //implement CRDT
+
+
+
+
+
+
+
+
+}
+
 wss.on("connection", (ws: MyWebSocket) => {
   console.log("New client connected");
 
@@ -280,7 +297,11 @@ wss.on("connection", (ws: MyWebSocket) => {
             );
             return;
           }
-          await broadcastMessage(JSON.stringify(data), ws.sheetId, ws);
+
+          // await broadcastMessage(JSON.stringify(data), ws.sheetId, ws);
+          //cant do this directly we need to use redis and worker will pick event and send to all users
+          handleUpdate(data.data, ws);
+
           break;
 
         default:

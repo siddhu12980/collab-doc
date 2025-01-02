@@ -1,5 +1,5 @@
 {
-  "name": "ws-server",
+  "name": "worker",
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
@@ -13,10 +13,6 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "redis": "^4.7.0",
-    "ws": "^8.18.0"
-  },
-  "devDependencies": {
-    "@types/ws": "^8.5.13"
+    "redis": "^4.7.0"
   }
 }

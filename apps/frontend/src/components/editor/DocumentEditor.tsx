@@ -3,8 +3,12 @@ import { useParams } from "react-router-dom";
 import StarterKit from "@tiptap/starter-kit";
 import { WS_URL } from "../../config/constants";
 import docAPi from "../../services/mockApi";
+import { Step } from "prosemirror-transform";
 
 import { Document } from "../../types/auth";
+import { useEditor, EditorContent, Extension } from "@tiptap/react";
+import { EditorState, TextSelection } from "prosemirror-state";
+import { Decoration } from "@tiptap/pm/view";
 
 enum MESSAGE_TYPE {
   JOIN = "join",
@@ -13,12 +17,31 @@ enum MESSAGE_TYPE {
   RESPONSE = "response",
   LEAVE = "leave",
   UPDATE = "update",
+  CURSOR_UPDATE = "cursorUpdate",
+}
+enum Display_Cursor_Color {
+  RED = "red",
+  BLUE = "blue",
+  GREEN = "green",
+  YELLOW = "yellow",
+  PURPLE = "purple",
+  ORANGE = "orange",
+  PINK = "pink",
+  GRAY = "gray",
+  BLACK = "black",
+  WHITE = "white",
 }
 
 interface ACtiveUser {
   id: string;
   email?: string;
   username: string;
+  cursor_position?: {
+    anchor?: number;
+    head?: number;
+  };
+  //randomly select display color
+  displaycolor?: Display_Cursor_Color;
 }
 
 export default function DocumentEditor() {
@@ -122,6 +145,11 @@ export default function DocumentEditor() {
     };
   };
 
+  useEffect(() => {
+    // Continuously update cursors for active users
+    displayCursors();
+  }, [activeUsers]);
+
   const handleWebSocketMessage = (data: any) => {
     const { type, data: messageData } = data;
 
@@ -147,7 +175,7 @@ export default function DocumentEditor() {
         break;
 
       case MESSAGE_TYPE.UPDATE:
-        handleContentUpdate(messageData);
+        // handleContentUpdate(messageData);
         break;
 
       default:
@@ -175,11 +203,111 @@ export default function DocumentEditor() {
     );
   };
 
-  const handleContentUpdate = (data: { content: string }) => {
-    if (data.content !== content) {
-      setContent(data.content);
+  const recreateCursor = (cursor_position: {
+    anchor?: number;
+    head?: number;
+  }) => {
+    if (!editor || !cursor_position || cursor_position.anchor === undefined) {
+      return;
     }
+
+    const { anchor, head } = cursor_position;
+
+    const docSize = editor.state.doc.content.size;
+    const resolvedAnchor = Math.min(Math.max(anchor, 0), docSize);
+    const resolvedHead =
+      head !== undefined
+        ? Math.min(Math.max(head, 0), docSize)
+        : resolvedAnchor;
+
+    const selection = TextSelection.create(
+      editor.state.doc,
+      resolvedAnchor,
+      resolvedHead
+    );
+
+    editor.view.dispatch(
+      editor.state.tr.setSelection(selection) // Update editor's selection
+    );
   };
+
+  const displayCursors = () => {
+    activeUsers.forEach((user) => {
+      if (user.cursor_position) {
+        recreateCursor(user.cursor_position);
+      }
+    });
+  };
+
+  const editor = useEditor({
+    extensions: [StarterKit],
+
+    content: doc?.content || "Hello",
+
+    onUpdate({ editor, transaction }) {
+      const cursor = editor.state.selection.toJSON();
+
+      const cursorLine = editor.state.selection.content().toJSON();
+
+      console.log("cursorLine:", cursorLine);
+
+      console.log("Cursor position", cursor);
+    },
+
+    onTransaction: ({ editor }) => {
+      const res = editor.state.selection.toJSON();
+
+      //     {
+      //   "type": "text",
+      //   "anchor": 3,
+      //   "head": 3
+      // }
+
+      if (socket) {
+        console.log("Sending  Cursor position", res);
+        socket.send(
+          JSON.stringify({
+            type: MESSAGE_TYPE.CURSOR_UPDATE,
+            data: {
+              cursor: res,
+            },
+          })
+        );
+      }
+    },
+  });
+
+  // editor.chain().focus().setTextSelection(10).run()
+
+  // let props = {
+  //   decorations(state: EditorState) {
+  //     const decos = [];
+  //     const clientID = myUser?.id;
+
+  //     for (const user of activeUsers) {
+  //       if (!user.cursor_position) continue;
+
+  //       const cursorClass = `cursor ${user.id === clientID ? "me" : ""} ${
+  //         user.id === clientID ? "active" : "inactive"
+  //       }`;
+  //       const dom = document.createElement("div");
+
+  //       dom.innerHTML = `<span class="${cursorClass}"
+  //       style="background-color:${user.displaycolor || "red"};
+  //       border-top-color:${user.displaycolor || "red"}">
+  //       ${user.username || user.id}
+  //     </span>`;
+
+  //       dom.style.display = "inline";
+  //       dom.className = "tooltip";
+
+  //       decos.push(Decoration.widget(user.cursor_position.x, dom));
+  //     }
+
+  //     return DecorationSet.create(state.doc, decos);
+  //   },
+  // };
+  
 
   return (
     <div className="flex flex-col min-h-screen bg-gray-900">
@@ -195,6 +323,13 @@ export default function DocumentEditor() {
             <div className="flex items-center space-x-2">
               {activeUsers.map((user) => (
                 <div
+                  onClick={() => {
+                    setTimeout(() => {
+                      const res = editor?.commands.setNodeSelection(1);
+
+                      console.log("user clicked", res);
+                    }, 2000);
+                  }}
                   key={user.id}
                   className={`px-3 py-1 rounded-full text-sm ${
                     user.id === myUser?.id
@@ -215,8 +350,89 @@ export default function DocumentEditor() {
           </div>
         </div>
       </header>
+      <main className="flex-1 p-4">
+        <div className="max-w-4xl mx-auto bg-gray-800 rounded-lg shadow-lg p-4 relative">
+          {editor && (
+            <>
+              {/* Render other users' cursors */}
 
-      <div className="max-w-4xl mx-auto h-full"></div>
+              <EditorContent editor={editor} className="prose max-w-none" />
+            </>
+          )}
+
+          <style>{`
+            /* Remove default outline */
+            .ProseMirror {
+              min-height: 200px;
+              outline: none !important;
+              background-color: #1f2937; /* bg-gray-800 */
+              color: white; /* White text */
+            }
+
+            /* Style the editor content */
+            .ProseMirror p {
+              margin: 1em 0;
+            }
+
+            /* Style headings */
+            .ProseMirror h1 {
+              font-size: 2em;
+              font-weight: bold;
+              margin: 1em 0;
+            }
+
+            .ProseMirror h2 {
+              font-size: 1.5em;
+              font-weight: bold;
+              margin: 1em 0;
+            }
+
+            /* Style lists */
+            .ProseMirror ul,
+            .ProseMirror ol {
+              padding-left: 2em;
+              margin: 1em 0;
+            }
+
+            /* Style links */
+            .ProseMirror a {
+              color: #3b82f6; /* Same as before */
+              text-decoration: underline;
+            }
+
+            /* Custom styling for focused state */
+            .ProseMirror:focus {
+              box-shadow: none; /* Remove focus border shadow */
+              border-radius: 4px;
+            }
+
+            /* Style code blocks */
+            .ProseMirror pre {
+              background-color: #374151; /* Darker gray for code blocks */
+              padding: 1em;
+              border-radius: 4px;
+              margin: 1em 0;
+              color: #e5e7eb; /* Light gray text */
+            }
+
+            /* Style inline code */
+            .ProseMirror code {
+              background-color: #374151; /* Darker gray for inline code */
+              padding: 0.2em 0.4em;
+              border-radius: 4px;
+              color: #e5e7eb; /* Light gray text */
+            }
+
+            /* Style blockquotes */
+            .ProseMirror blockquote {
+              border-left: 4px solid #4b5563; /* Gray border */
+              padding-left: 1em;
+              margin: 1em 0;
+              color: #d1d5db; /* Light gray text */
+            }
+          `}</style>
+        </div>
+      </main>
     </div>
   );
 }

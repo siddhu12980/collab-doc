@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "serve -s -p 5173 dist",
+    "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview"
@@ -15,6 +15,7 @@
     "@tiptap/starter-kit": "^2.11.0",
     "axios": "^1.7.9",
     "lucide-react": "^0.469.0",
+    "prosemirror-state": "^1.4.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.1.1",
