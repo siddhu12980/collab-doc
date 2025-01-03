@@ -154,3 +154,34 @@ export function decodeJWT(token: string): any {
     return null;
   }
 }
+
+interface TextChange {
+  operation: "add" | "delete";
+  changeText: string;
+  changeIndex: number;
+}
+
+export const calculateTextChange = (
+  prevText: string,
+  newText: string,
+  cursorPos: number
+): TextChange | null => {
+  if (prevText === newText) return null;
+
+  const operation = newText.length > prevText.length ? "add" : "delete";
+  let changeIndex = 0;
+  let changeText = "";
+
+  if (operation === "add") {
+    changeIndex = Math.max(0, cursorPos - (newText.length - prevText.length));
+    changeText = newText.slice(changeIndex, cursorPos);
+  } else {
+    changeIndex = cursorPos;
+    changeText = prevText.slice(
+      cursorPos,
+      cursorPos + (prevText.length - newText.length)
+    );
+  }
+
+  return { operation, changeText, changeIndex };
+};

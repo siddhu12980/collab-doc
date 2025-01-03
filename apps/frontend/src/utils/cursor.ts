@@ -126,4 +126,7 @@ export function calculateCursorPosition(
     ),
     left: Math.max(0, left)
   };
+
+  //   const top = offsetTop - textarea.scrollTop + parseInt(styles.paddingTop);
+  // const left = offsetLeft - textarea.scrollLeft + parseInt(styles.paddingLeft);
 }

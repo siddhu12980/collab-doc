@@ -1,6 +1,5 @@
 import WebSocket from "ws";
 import { decodeToken, displaySheetANdUser } from "./utils";
-import { redisClient } from "./utils";
 
 const wss = new WebSocket.Server({ port: 8081, host: "localhost" });
 
@@ -246,8 +245,86 @@ async function broadcastMessage(
 }
 
 async function handleUpdate(data: any, ws: MyWebSocket) {
-  //need to implement this
-  //implement CRDT
+  const sheetId = ws.sheetId;
+
+  const userID = ws.userId;
+
+  if (!sheetId) {
+    console.log("No sheetId found for update");
+    return;
+  }
+
+  const users = sheetMap.get(sheetId);
+
+  if (!users) {
+    console.log("No users found for sheet", sheetId);
+    return;
+  }
+
+  const message = JSON.stringify({
+    type: MESSAGE_TYPE.UPDATE,
+    data: {
+      userId: userID,
+      sheetId: sheetId,
+      username: ws.username,
+      data: data,
+    },
+  });
+
+  await broadcastMessage(message, sheetId, ws);
+}
+
+async function handleCursorUpdate(data: any, ws: MyWebSocket) {
+  const sheetId = ws.sheetId;
+
+  if (!sheetId) {
+    console.log("No sheetId found for cursor update");
+    return;
+  }
+
+  const users = sheetMap.get(sheetId);
+
+  if (!users) {
+    console.log("No users found for sheet", sheetId);
+    return;
+  }
+
+  const userId = ws.userId;
+
+  if (!userId) {
+    console.log("No userId found for cursor update");
+    return;
+  }
+
+  const cursor_position = data.cursor_position;
+
+  if (!cursor_position) {
+    console.log("No cursor_position found for cursor update");
+    return;
+  }
+
+  const head = cursor_position.head;
+  const anchor = cursor_position.anchor;
+
+  if (!head || !anchor) {
+    console.log("Invalid cursor_position found for cursor update");
+    return;
+  }
+
+  const message = JSON.stringify({
+    type: MESSAGE_TYPE.CURSOR_UPDATE,
+    data: {
+      userId: userId,
+      sheetId: sheetId,
+      username: ws.username,
+      cursor_position: {
+        head: head,
+        anchor: anchor,
+      },
+    },
+  });
+
+  await broadcastMessage(message, sheetId, ws);
 }
 
 wss.on("connection", (ws: MyWebSocket) => {
@@ -290,6 +367,23 @@ wss.on("connection", (ws: MyWebSocket) => {
           // await broadcastMessage(JSON.stringify(data), ws.sheetId, ws);
           //cant do this directly we need to use redis and worker will pick event and send to all users
           handleUpdate(data.data, ws);
+
+          break;
+
+        case MESSAGE_TYPE.CURSOR_UPDATE:
+          if (!ws.sheetId) {
+            ws.send(
+              JSON.stringify({
+                type: MESSAGE_TYPE.ERROR,
+                data: {
+                  message: "Must join a sheet first",
+                },
+              })
+            );
+            return;
+          }
+
+          handleCursorUpdate(data.data, ws);
 
           break;
 

@@ -120,47 +120,55 @@ export default function CustomTextArea() {
           </button>
         </div>
 
-        <div className="relative" ref={containerRef}>
-          <textarea
-            ref={textareaRef}
-            value={text}
-            onChange={handleChange}
-            onSelect={handleSelect}
-            className="w-full h-64 p-4 border rounded-lg font-mono resize-none"
-            placeholder="Start typing..."
-          />
-
-          {users.map((user) => {
-            const { top, left } = calculateCursorPosition(
-              user.position,
-              textareaRef.current,
-              containerRef.current
-            );
-
-            console.log("Top is", top, left);
-
-            return (
-              <div
-                key={user.id}
-                className="absolute pointer-events-none"
-                style={{
-                  left: `${left}px`,
-                  top: `${top}px`,
-                  color: user.color,
-                }}
-              >
-                <div className="relative">
-                  <span className="absolute -top-5 whitespace-nowrap text-xs">
-                    {user.name}
-                  </span>
-                  <div
-                    className="w-0.5 h-5 animate-pulse"
-                    style={{ backgroundColor: user.color }}
-                  />
+        <div className="max-w-4xl mx-auto bg-gray-800 rounded-lg shadow-lg p-4">
+          <div
+            className="relative min-h-[16rem] bg-white dark:bg-gray-900 rounded-lg"
+            ref={containerRef}
+          >
+            <textarea
+              ref={textareaRef}
+              value={content}
+              onChange={handleChange}
+              onSelect={handleSelect}
+              className="w-full h-full min-h-[16rem] p-4 bg-transparent text-gray-900 
+               dark:text-gray-100 font-mono resize-none outline-none border 
+               border-gray-200 dark:border-gray-700 rounded-lg"
+              placeholder="Start typing..."
+              spellCheck="false"
+            />
+            {activeUsers.map((user) => {
+              const { top, left } = calculateCursorPosition(
+                user.cursor_position?.head!,
+                textareaRef.current,
+                containerRef.current
+              );
+              return (
+                <div
+                  key={user.id}
+                  className="absolute pointer-events-none transform"
+                  style={{
+                    left: `${left}px`,
+                    top: `${top}px`,
+                    color: user.displaycolor,
+                    zIndex: 20,
+                  }}
+                >
+                  <div className="relative">
+                    <span
+                      className="absolute -top-5 whitespace-nowrap text-xs bg-gray-800 
+                         px-1.5 py-0.5 rounded"
+                    >
+                      {user.username}
+                    </span>
+                    <div
+                      className="w-0.5 h-5 animate-pulse"
+                      style={{ backgroundColor: user.displaycolor }}
+                    />
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>

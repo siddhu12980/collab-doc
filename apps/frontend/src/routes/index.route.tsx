@@ -4,6 +4,7 @@ import HomePage from "../components/home/HomePage";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import DocumentEditor from "../components/editor/DocumentEditor";
 import CustomTextArea from "../components/CustomTextArea";
+import Test from "../components/editor/Test";
 
 const AppRoutes = () => {
   // TODO: Implement actual auth state management
@@ -27,7 +28,7 @@ const AppRoutes = () => {
           <Route path="/signin" element={<SignIn />} />
           <Route path="/signup" element={<SignUp />} />
           <Route path="/home" element={<HomePage />} />
-          <Route path="/doc/:id" element={<DocumentEditor />} />
+          <Route path="/doc/:id" element={<Test />} />
           <Route path="/test" element={<CustomTextArea />} />
         </Routes>
       </BrowserRouter>
