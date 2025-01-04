@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { data, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { WS_URL } from "../../config/constants";
 import docAPi from "../../services/mockApi";
 
@@ -37,10 +37,8 @@ interface ACtiveUser {
   displaycolor?: Display_Cursor_Color;
 }
 
-export default function DocumentEditor() {
+const NewEditor = () => {
   const { id } = useParams<{ id: string }>();
-
-  const [token, setToken] = useState<string | null>(null);
 
   const [doc, setDoc] = useState<Document | null>(null);
 
@@ -56,11 +54,14 @@ export default function DocumentEditor() {
 
   const [isConnected, setIsConnected] = useState(false);
 
+  const [prevValue, setPrevValue] = useState("");
+
+  const [crdt1] = useState(() => CRDT.getInstance("site1"));
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const containerRef = useRef<HTMLDivElement>(null);
 
-  const [crdt, setCrdt] = useState<CRDT | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   async function getDocData(documentId: string) {
     try {
@@ -75,6 +76,15 @@ export default function DocumentEditor() {
       console.error("Error fetching document:", error);
     }
   }
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setContent(e.target.value);
+
+    if (textareaRef.current) {
+      const changedText = textareaRef.current.value;
+      console.log("Changed text:", changedText);
+    }
+  };
 
   const handleSelect = (e: React.SyntheticEvent<HTMLTextAreaElement>) => {
     const target = e.target as HTMLTextAreaElement;
@@ -136,9 +146,6 @@ export default function DocumentEditor() {
           username: parsedAuthData.username,
         });
 
-        const crdt = CRDT.getInstance(parsedAuthData.id);
-        setCrdt(crdt);
-
         return { token, parsedAuthData, documentId: id };
       } catch (error) {
         console.error("Error parsing auth data:", error);
@@ -147,45 +154,13 @@ export default function DocumentEditor() {
     };
 
     const sessionData = initializeUserSession();
-
-    if (!sessionData || !sessionData.parsedAuthData) {
-      console.error("Failed to initialize user session");
-      return;
-    }
-
-    console.log("Session data:", sessionData);
-    console.log("crdt:", crdt);
-
     if (sessionData) {
       getDocData(sessionData.documentId);
       initializeWebSocket(sessionData.token, sessionData.documentId);
-      setToken(sessionData.token);
     }
   }, [id]);
 
-  useEffect(() => {
-    console.log("Running Second effect:", crdt);
-    if (!token || !id) {
-      return;
-    }
-
-    if (!crdt) {
-      console.error("CRDT not initialized");
-      return;
-    }
-
-    const c = CRDT.getInstance(myUser?.id!);
-
-    setCrdt(c);
-
-    initializeWebSocket(token, id);
-  }, [token]);
-
   const initializeWebSocket = (token: string, documentId: string) => {
-    if (!token || !crdt) {
-      console.error("Missing required data for WebSocket initialization");
-      return;
-    }
     const ws = new WebSocket(WS_URL);
 
     ws.onopen = () => {
@@ -219,137 +194,27 @@ export default function DocumentEditor() {
     };
   };
 
-  const handleContentUpdate = (datas: any) => {
-    const data = datas.data;
-
+  const handleContentUpdate = (data: any) => {
     console.log("Content update:", data);
+    if (textareaRef.current) {
+      const { operation, changeText, changeIndex } = data;
 
-    console.log("CRDT:", crdt);
+      const currentValue = textareaRef.current.value;
 
-    if (!crdt) {
-      console.error("CRDT not initialized");
-      return;
-    }
+      let newValue = "";
 
-    if (!textareaRef.current) {
-      console.error("Textarea not initialized");
-      return;
-    }
-
-    if (data.type === "insert") {
-      const index = crdt.integrate(data.character);
-
-      if (index == -1) {
-        console.error("Char Adding Failed");
-        return;
+      if (operation === "add") {
+        newValue =
+          currentValue.slice(0, changeIndex) +
+          changeText +
+          currentValue.slice(changeIndex);
+      } else if (operation === "delete") {
+        newValue =
+          currentValue.slice(0, changeIndex) +
+          currentValue.slice(changeIndex + changeText.length);
       }
 
-      setContent(crdt.toString());
-    } else if (data.type === "delete") {
-      const state = crdt.getState();
-
-      const index = state.findIndex(
-        (char) =>
-          char.clock === data.character.clock &&
-          char.siteId === data.character.siteId
-      );
-
-      if (index !== -1) {
-        crdt.delete(index);
-      }
-
-      setContent(crdt.toString());
-    }
-  };
-
-  const findTextDiff = (oldStr: string, newStr: string) => {
-    // If strings are equal, no changes
-    if (oldStr === newStr) return null;
-
-    let i = 0;
-    const minLen = Math.min(oldStr.length, newStr.length);
-
-    // Find the first different character
-    while (i < minLen && oldStr[i] === newStr[i]) i++;
-
-    // Handle insertions
-    if (newStr.length > oldStr.length) {
-      return {
-        type: "insert" as const,
-        index: i,
-        chars: newStr[i],
-      };
-    }
-
-    // Handle deletions
-    if (newStr.length < oldStr.length) {
-      return {
-        type: "delete" as const,
-        index: i,
-      };
-    }
-
-    // If lengths are equal but strings are different,
-    // handle as a deletion (the subsequent change will handle the insertion)
-    return {
-      type: "delete" as const,
-      index: i,
-    };
-  };
-
-  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    if (!crdt) {
-      console.error("CRDT not initialized");
-      return;
-    }
-
-    const newText = e.target.value;
-
-    if (newText === content) return;
-
-    const diff = findTextDiff(content, newText);
-
-    if (!diff) return;
-
-    if (diff.type === "insert") {
-      const char = crdt.insert(diff.chars, diff.index);
-      setContent(crdt.toString());
-
-      const message = JSON.stringify({
-        type: MESSAGE_TYPE.UPDATE,
-        userId: myUser?.id,
-        sheetId: id,
-        data: {
-          type: "insert",
-          character: char,
-          sourceSiteId: crdt.getID(),
-        },
-      });
-
-      if (socket) {
-        socket.send(message);
-      }
-    } else if (diff.type === "delete") {
-      const char = crdt.delete(diff.index);
-
-      if (char) {
-        setContent(crdt.toString());
-
-        const message = JSON.stringify({
-          type: MESSAGE_TYPE.UPDATE,
-          userId: myUser?.id,
-          sheetId: id,
-          data: {
-            type: "delete",
-            character: char,
-            sourceSiteId: crdt.getID(),
-          },
-        });
-
-        if (socket) {
-          socket.send(message);
-        }
-      }
+      setContent(newValue);
     }
   };
 
@@ -431,6 +296,56 @@ export default function DocumentEditor() {
     );
   };
 
+  const handleInputChange = (e: React.FormEvent<HTMLTextAreaElement>) => {
+    const currentValue = e.currentTarget.value;
+
+    if (textareaRef.current) {
+      const anchor = textareaRef.current.selectionStart ?? 0;
+      const head = textareaRef.current.selectionEnd ?? 0;
+
+      let operation = "none";
+      let changeText = "";
+      let changeIndex = anchor;
+
+      if (currentValue.length > prevValue.length) {
+        // Add operation
+        operation = "add";
+        const addedText = currentValue.slice(prevValue.length);
+        changeText = addedText;
+        changeIndex = anchor - addedText.length; // Start index of added text
+      } else if (currentValue.length < prevValue.length) {
+        // Delete operation
+        operation = "delete";
+        const deletedText = prevValue.slice(currentValue.length);
+        changeText = deletedText;
+        changeIndex = anchor;
+      }
+
+      const message = JSON.stringify({
+        type: MESSAGE_TYPE.UPDATE,
+
+        data: {
+          operation,
+          changeText,
+          changeIndex,
+          cursor_update: {
+            anchor,
+            head,
+          },
+        },
+      });
+
+      console.log("Message:", message);
+
+      if (socket) {
+        console.log("Sending message to server");
+        socket.send(message);
+      }
+
+      setPrevValue(currentValue);
+    }
+  };
+
   return (
     <div className="flex flex-col min-h-screen bg-gray-900 gap-8">
       <header className="bg-gray-800 shadow-lg p-4">
@@ -478,7 +393,8 @@ export default function DocumentEditor() {
           <textarea
             ref={textareaRef}
             value={content}
-            onChange={handleTextChange}
+            onInput={handleInputChange}
+            onChange={handleChange}
             onSelect={handleSelect}
             className="w-full h-full min-h-[16rem] p-4 bg-transparent text-gray-900 
                dark:text-gray-100 font-mono resize-none outline-none border 
@@ -522,4 +438,6 @@ export default function DocumentEditor() {
       </div>
     </div>
   );
-}
+};
+
+export default NewEditor;

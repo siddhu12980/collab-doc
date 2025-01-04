@@ -9,12 +9,14 @@ interface ICharacter {
   siteId: string;
   clock: number;
   deleted: boolean;
-  property: {
-    bold?: boolean;
-    italic?: boolean;
-    underline?: boolean;
-    color?: string;
-  };
+  properties?: CharacterProperties;
+}
+
+interface CharacterProperties {
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  color?: string;
 }
 
 class Character implements ICharacter {
@@ -25,209 +27,191 @@ class Character implements ICharacter {
     public siteId: string,
     public clock: number,
     public deleted: boolean = false,
-    public property: {
-      bold?: boolean;
-      italic?: boolean;
-      underline?: boolean;
-      color?: string;
-    } = {} // Default to an empty object for simplicity
+    public properties: CharacterProperties = {}
   ) {}
 
-  compareTo(other: Character): number {
-    console.log(this.position, other.position);
+  compareTo?(other: Character): number {
+    // Compare positions element by element
+    const minLength = Math.min(this.position.length, other.position.length);
 
-    // Compare positions first
-    for (
-      let i = 0;
-      i < Math.min(this.position.length, other.position.length);
-      i++
-    ) {
-      if (this.position[i] < other.position[i]) return -1;
-      if (this.position[i] > other.position[i]) return 1;
+    for (let i = 0; i < minLength; i++) {
+      if (this.position[i] !== other.position[i]) {
+        return this.position[i] - other.position[i];
+      }
     }
 
-    // If positions are equal, shorter array comes first
-    if (this.position.length < other.position.length) return -1;
-    if (this.position.length > other.position.length) return 1;
+    // If positions are equal up to the minimum length, shorter arrays come first
+    if (this.position.length !== other.position.length) {
+      return this.position.length - other.position.length;
+    }
 
-    // If positions are identical, compare site IDs
-    if (this.siteId < other.siteId) return -1;
-    if (this.siteId > other.siteId) return 1;
-
-    return 0;
+    // If positions are identical, use site ID as tiebreaker
+    return this.siteId.localeCompare(other.siteId);
   }
 }
 
-interface ICRDT {
-  insert(value: string, index: number): Character;
-  delete(index: number): Character | undefined;
-  integrate(char: Character): number;
-  toString(): string;
-}
-
-class CRDT implements ICRDT {
+class CRDT {
   private characters: Character[] = [];
   private clock: number = 0;
   private readonly base: number = 32;
+  private static instance: CRDT | null = null;
 
-  constructor(private siteId: string) {}
+  private constructor(private siteId: string) {}
 
-  getID(): string {
-    return this.siteId;
+  static getInstance(siteId: string): CRDT {
+    CRDT.instance = new CRDT(siteId);
+    return CRDT.instance;
   }
 
-  //   private generatePositionBetween(
-  //     prev: Character | null,
-  //     next: Character | null
-  //   ): Position {
-  //     if (!prev && !next) {
-  //       return [Math.floor(this.base / 2)];
-  //     }
-
-  //     if (!prev) {
-  //       const newPos = next
-  //         ? new Array(next.position.length)
-  //             .fill(0)
-  //             .map((_, i) => Math.floor(next.position[i] / 2))
-  //         : [Math.floor(this.base / 2)];
-  //       return newPos;
-  //     }
-
-  //     if (!next) {
-  //       // Use the last value of prev.
-  //       const last = prev.position[prev.position.length - 1];
-  //       return [...prev.position!, last + 1]; // Increment the last value without adding extra levels.
-  //     }
-
-  //     const minLength = Math.min(prev.position.length, next.position.length);
-
-  //     for (let i = 0; i < minLength; i++) {
-  //       const difference = next.position[i] - prev.position[i];
-  //       if (difference > 1) {
-  //         const newPos = [...prev.position];
-  //         newPos[i] = prev.position[i] + Math.floor(difference / 2);
-  //         return newPos;
-  //       }
-  //     }
-
-  //     return [...prev.position, Math.floor(this.base / 2)];
-  //   }
-
-  generatePositionBetween(
+  private generatePositionBetween(
     prev: Position | null,
     next: Position | null,
-    maxDepth: number = 2
+    depth: number = 0
   ): Position {
-    const prevPosition = prev || [];
-    const nextPosition = next || [];
-
-    const newPosition: Position = [];
-
-    for (let depth = 0; depth < maxDepth; depth++) {
-      const prevValue = prevPosition[depth] ?? 0; // Default to 0 if depth not defined
-      const nextValue = nextPosition[depth] ?? this.base; // Default to `base` if no `next`
-
-      if (nextValue - prevValue > 1) {
-        // Enough space to create a midpoint
-        const midpoint = Math.floor((prevValue + nextValue) / 2);
-        newPosition.push(midpoint);
-        return newPosition;
-      } else {
-        // No space; reuse current values and go deeper
-        newPosition.push(prevValue);
-      }
+    const MAX_DEPTH = 32;
+    if (depth >= MAX_DEPTH) {
+      throw new Error("Maximum depth exceeded");
     }
 
-    // If we exhausted `maxDepth`, fall back to appending a fractional value
-    newPosition.push(this.base / 2);
-    return newPosition;
+    // Initialize boundaries
+    const head = Math.floor(this.base / 2);
+    const prevPos = prev || [0];
+    const nextPos = next || [this.base];
+
+    // Get values at current depth
+    const prevValue = prevPos[depth] ?? 0;
+    const nextValue = nextPos[depth] ?? this.base;
+
+    // If there's enough space between values
+    if (nextValue - prevValue > 1) {
+      // Create new position by copying previous position up to current depth
+      const newPos = prevPos.slice(0, depth);
+      // Calculate midpoint, ensuring it's different from boundaries
+      const midpoint =
+        prevValue + Math.max(1, Math.floor((nextValue - prevValue) / 2));
+      newPos[depth] = midpoint;
+      return newPos;
+    }
+
+    // If we're at the end of prev position, extend it
+    if (depth >= prevPos.length) {
+      return [...prevPos, head];
+    }
+
+    // No space at current depth, go deeper
+    const newPos = [...prevPos.slice(0, depth + 1)];
+    newPos[depth] = prevValue;
+    return this.generatePositionBetween(prevPos, nextPos, depth + 1);
   }
 
   insert(value: string, index: number): Character {
-    const prev = index > 0 ? this.characters[index - 1] : null; //0 -> a ,
+    if (index < 0 || index > this.characters.length) {
+      throw new Error("Invalid index");
+    }
+
+    const prev = index > 0 ? this.characters[index - 1] : null;
     const next = index < this.characters.length ? this.characters[index] : null;
 
-    const position = this.generatePositionBetween(prev, next);
-    console.log("Position", position); // [16, 16]
+    // Generate position between prev and next
+    const position = this.generatePositionBetween(
+      prev?.position || null,
+      next?.position || null
+    );
 
-    const id = `${this.siteId}-${this.clock}`;
+    // Create new character with unique identifier
+    const char = new Character(
+      `${this.siteId}:${this.clock}`,
+      value,
+      position,
+      this.siteId,
+      this.clock++
+    );
 
-    const char = new Character(id, value, position, this.siteId, this.clock++);
-
-    this.characters.splice(index, 0, char);
-    return char;
-  }
-
-  delete(index: number): Character | undefined {
-    const char = this.characters[index];
-
-    if (!char) {
-      return undefined;
-    }
-
-    if (char.deleted) return undefined;
-
-    char.deleted = true;
+    // Insert into local array and maintain order
+    const insertIndex = this.findInsertIndex(char);
+    this.characters.splice(insertIndex, 0, char);
 
     return char;
   }
 
-  //   integrate(char: Character): number {
-  //     let index = 0;
-  //     while (
-  //       index < this.characters.length &&
-  //       this.characters[index].compareTo(char) < 0
-  //     ) {
-  //       index++;
-  //     }
+  private findInsertIndex(char: Character): number {
+    let left = 0;
+    let right = this.characters.length;
 
-  //     this.characters.splice(index, 0, char);
-  //     return index;
-  //   }
+    while (left < right) {
+      const mid = Math.floor((left + right) / 2);
 
-  integrate(char: Character): number {
-    if (!char || !char.position || !char.siteId) {
-      throw new Error("Invalid character");
-    }
+      if (!this.characters[mid].compareTo) {
+        throw Error("IDK the error ");
+      }
 
-    let low = 0;
-    let high = this.characters.length;
+      const comparison = this.characters[mid].compareTo(char);
 
-    // Binary search for insertion point
-    while (low < high) {
-      const mid = Math.floor((low + high) / 2);
-      if (this.characters[mid].compareTo(char) < 0) {
-        low = mid + 1;
+      if (comparison < 0) {
+        left = mid + 1;
       } else {
-        high = mid;
+        right = mid;
       }
     }
 
-    this.characters.splice(low, 0, char);
-    return low;
+    return left;
+  }
+
+  integrate(char: Character): number {
+    if (!char || !Array.isArray(char.position) || !char.siteId) {
+      throw new Error("Invalid character");
+    }
+
+    // Find the correct position using binary search
+    const index = this.findInsertIndex(char);
+
+    // Check if character already exists
+    const existingChar = this.characters[index];
+    if (
+      existingChar &&
+      existingChar.siteId === char.siteId &&
+      existingChar.clock === char.clock
+    ) {
+      return -1; // Character already exists
+    }
+
+    // Insert the character
+    this.characters.splice(index, 0, char);
+    return index;
+  }
+
+  delete(index: number): Character | undefined {
+    if (index < 0 || index >= this.characters.length) {
+      return undefined;
+    }
+
+    const char = this.characters[index];
+    if (!char.deleted) {
+      char.deleted = true;
+      return char;
+    }
+    return undefined;
   }
 
   toString(): string {
     return this.characters
-      .map((char) => {
-        if (char.deleted) return "";
-        return char.value;
-      })
+      .filter((char) => !char.deleted)
+      .map((char) => char.value)
       .join("");
   }
 
   getState(): Character[] {
-    const sorted_characters = sortBy(this.characters, (char) => char.position);
-
-    return [...sorted_characters];
+    return sortBy([...this.characters], (char) => char.position);
   }
 
   getClock(): number {
     return this.clock;
   }
+
+  getID(): string {
+    return this.siteId;
+  }
 }
 
-export type { ICharacter, ICRDT };
 export { Character, CRDT };
-
-// need to create singleton
+export type { ICharacter, CharacterProperties };
