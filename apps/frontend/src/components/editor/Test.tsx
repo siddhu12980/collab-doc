@@ -24,7 +24,7 @@ const Test = () => {
   const [networkDelay] = useState(1000); // Configurable network delay
 
   const textareaRef1 = useRef<HTMLTextAreaElement>(null);
-  
+
   const textareaRef2 = useRef<HTMLTextAreaElement>(null);
 
   const lastSelectionRef1 = useRef<SelectionState>({ start: 0, end: 0 });
@@ -112,6 +112,7 @@ const Test = () => {
     console.log(`Propagating event from ${event.sourceSiteId}:`, event);
 
     setTimeout(() => {
+
       const targetCRDT = event.sourceSiteId === crdt1.getID() ? crdt2 : crdt1;
       const setTargetText =
         event.sourceSiteId === crdt1.getID() ? setText2 : setText1;

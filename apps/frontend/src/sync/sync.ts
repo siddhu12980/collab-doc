@@ -2,6 +2,20 @@ import { sortBy } from "lodash";
 
 type Position = number[];
 
+export function generateShortUUID(length: number = 8): string {
+  const characters =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  let result = "";
+  const charactersLength = characters.length;
+
+  for (let i = 0; i < length; i++) {
+    const randomIndex = Math.floor(Math.random() * charactersLength);
+    result += characters.charAt(randomIndex);
+  }
+
+  return result;
+}
+
 interface ICharacter {
   id: string;
   value: string;
@@ -10,6 +24,7 @@ interface ICharacter {
   clock: number;
   deleted: boolean;
   properties?: CharacterProperties;
+  compareTo(other: ICharacter): number;
 }
 
 interface CharacterProperties {
@@ -30,7 +45,7 @@ class Character implements ICharacter {
     public properties: CharacterProperties = {}
   ) {}
 
-  compareTo?(other: Character): number {
+  compareTo(other: ICharacter): number {
     // Compare positions element by element
     const minLength = Math.min(this.position.length, other.position.length);
 
@@ -45,8 +60,14 @@ class Character implements ICharacter {
       return this.position.length - other.position.length;
     }
 
-    // If positions are identical, use site ID as tiebreaker
-    return this.siteId.localeCompare(other.siteId);
+    // If positions are identical, compare site IDs
+    const siteIdComparison = this.siteId.localeCompare(other.siteId);
+    if (siteIdComparison !== 0) {
+      return siteIdComparison;
+    }
+
+    // If site IDs are identical, compare clocks
+    return this.clock - other.clock;
   }
 }
 
@@ -59,7 +80,9 @@ class CRDT {
   private constructor(private siteId: string) {}
 
   static getInstance(siteId: string): CRDT {
-    CRDT.instance = new CRDT(siteId);
+    if (!CRDT.instance || CRDT.instance.siteId !== siteId) {
+      CRDT.instance = new CRDT(siteId);
+    }
     return CRDT.instance;
   }
 
@@ -68,15 +91,15 @@ class CRDT {
     next: Position | null,
     depth: number = 0
   ): Position {
-    const MAX_DEPTH = 32;
-    if (depth >= MAX_DEPTH) {
-      throw new Error("Maximum depth exceeded");
-    }
+    // const MAX_DEPTH = 32;
+    // if (depth >= MAX_DEPTH) {
+    //   throw new Error("Maximum depth exceeded");
+    // }
 
     // Initialize boundaries
     const head = Math.floor(this.base / 2);
-    const prevPos = prev || [0];
-    const nextPos = next || [this.base];
+    const prevPos = prev ? [...prev] : [0];
+    const nextPos = next ? [...next] : [this.base];
 
     // Get values at current depth
     const prevValue = prevPos[depth] ?? 0;
@@ -87,8 +110,7 @@ class CRDT {
       // Create new position by copying previous position up to current depth
       const newPos = prevPos.slice(0, depth);
       // Calculate midpoint, ensuring it's different from boundaries
-      const midpoint =
-        prevValue + Math.max(1, Math.floor((nextValue - prevValue) / 2));
+      const midpoint = prevValue + Math.max(1, Math.floor((nextValue - prevValue) / 2));
       newPos[depth] = midpoint;
       return newPos;
     }
@@ -99,53 +121,33 @@ class CRDT {
     }
 
     // No space at current depth, go deeper
-    const newPos = [...prevPos.slice(0, depth + 1)];
-    newPos[depth] = prevValue;
-    return this.generatePositionBetween(prevPos, nextPos, depth + 1);
+    const newPos = [...prevPos];
+    return this.generatePositionBetween(newPos, nextPos, depth + 1);
   }
 
-  insert(value: string, index: number): Character {
-    if (index < 0 || index > this.characters.length) {
-      throw new Error("Invalid index");
+  private ensureCharacterInstance(char: ICharacter): Character {
+    if (char instanceof Character) {
+      return char;
     }
-
-    const prev = index > 0 ? this.characters[index - 1] : null;
-    const next = index < this.characters.length ? this.characters[index] : null;
-
-    // Generate position between prev and next
-    const position = this.generatePositionBetween(
-      prev?.position || null,
-      next?.position || null
+    return new Character(
+      char.id,
+      char.value,
+      char.position,
+      char.siteId,
+      char.clock,
+      char.deleted,
+      char.properties
     );
-
-    // Create new character with unique identifier
-    const char = new Character(
-      `${this.siteId}:${this.clock}`,
-      value,
-      position,
-      this.siteId,
-      this.clock++
-    );
-
-    // Insert into local array and maintain order
-    const insertIndex = this.findInsertIndex(char);
-    this.characters.splice(insertIndex, 0, char);
-
-    return char;
   }
 
-  private findInsertIndex(char: Character): number {
+  private findInsertIndex(char: ICharacter): number {
+    const characterInstance = this.ensureCharacterInstance(char);
     let left = 0;
     let right = this.characters.length;
 
     while (left < right) {
       const mid = Math.floor((left + right) / 2);
-
-      if (!this.characters[mid].compareTo) {
-        throw Error("IDK the error ");
-      }
-
-      const comparison = this.characters[mid].compareTo(char);
+      const comparison = this.characters[mid].compareTo(characterInstance);
 
       if (comparison < 0) {
         left = mid + 1;
@@ -157,26 +159,52 @@ class CRDT {
     return left;
   }
 
-  integrate(char: Character): number {
+  insert(value: string, index: number): Character {
+    if (index < 0 || index > this.characters.length) {
+      throw new Error("Invalid index");
+    }
+
+    const prev = index > 0 ? this.characters[index - 1] : null;
+    const next = index < this.characters.length ? this.characters[index] : null;
+
+    const position = this.generatePositionBetween(
+      prev?.position || null,
+      next?.position || null
+    );
+
+    const id = generateShortUUID(8);
+    const char = new Character(id, value, position, this.siteId, this.clock++);
+    const insertIndex = this.findInsertIndex(char);
+    this.characters.splice(insertIndex, 0, char);
+
+    return char;
+  }
+
+  integrate(char: ICharacter): number {
     if (!char || !Array.isArray(char.position) || !char.siteId) {
       throw new Error("Invalid character");
     }
 
-    // Find the correct position using binary search
-    const index = this.findInsertIndex(char);
+    const characterInstance = this.ensureCharacterInstance(char);
+    const index = this.findInsertIndex(characterInstance);
 
-    // Check if character already exists
-    const existingChar = this.characters[index];
-    if (
-      existingChar &&
-      existingChar.siteId === char.siteId &&
-      existingChar.clock === char.clock
-    ) {
-      return -1; // Character already exists
+    if (index < this.characters.length) {
+      const existingChar = this.characters[index];
+      if (
+        existingChar.siteId === characterInstance.siteId &&
+        existingChar.clock === characterInstance.clock &&
+        existingChar.id === characterInstance.id
+      ) {
+        return -1;
+      }
     }
 
-    // Insert the character
-    this.characters.splice(index, 0, char);
+    this.characters.splice(index, 0, characterInstance);
+    
+    if (characterInstance.siteId === this.siteId && characterInstance.clock >= this.clock) {
+      this.clock = characterInstance.clock + 1;
+    }
+
     return index;
   }
 
@@ -201,7 +229,10 @@ class CRDT {
   }
 
   getState(): Character[] {
-    return sortBy([...this.characters], (char) => char.position);
+    return sortBy([...this.characters], (char) => {
+      const pos = char.position.join(',');
+      return `${pos}-${char.siteId}-${char.clock}`;
+    });
   }
 
   getClock(): number {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { data, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { WS_URL } from "../../config/constants";
 import docAPi from "../../services/mockApi";
 
@@ -238,7 +238,9 @@ export default function DocumentEditor() {
 
     if (data.type === "insert") {
       const index = crdt.integrate(data.character);
+  
 
+      console.log("Character added at index successfully:", index);
       if (index == -1) {
         console.error("Char Adding Failed");
         return;
@@ -435,7 +437,12 @@ export default function DocumentEditor() {
     <div className="flex flex-col min-h-screen bg-gray-900 gap-8">
       <header className="bg-gray-800 shadow-lg p-4">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-white truncate">
+          <h1
+            onClick={() => {
+              console.log("Clicked", crdt?.getState());
+            }}
+            className="text-2xl font-bold text-white truncate"
+          >
             {doc?.title || "Loading..."}
           </h1>
 
