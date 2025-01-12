@@ -27,11 +27,18 @@ interface ICharacter {
   compareTo(other: ICharacter): number;
 }
 
-interface CharacterProperties {
+ interface CharacterProperties {
   bold?: boolean;
   italic?: boolean;
   underline?: boolean;
   color?: string;
+  center?: boolean;
+  left ?: boolean;
+  right ?: boolean;
+  strikethrough?: boolean;
+  heading?: boolean;
+  paragraph?: boolean;
+  highlight?: boolean;
 }
 
 class Character implements ICharacter {
@@ -110,7 +117,8 @@ class CRDT {
       // Create new position by copying previous position up to current depth
       const newPos = prevPos.slice(0, depth);
       // Calculate midpoint, ensuring it's different from boundaries
-      const midpoint = prevValue + Math.max(1, Math.floor((nextValue - prevValue) / 2));
+      const midpoint =
+        prevValue + Math.max(1, Math.floor((nextValue - prevValue) / 2));
       newPos[depth] = midpoint;
       return newPos;
     }
@@ -159,7 +167,11 @@ class CRDT {
     return left;
   }
 
-  insert(value: string, index: number): Character {
+  insert(
+    value: string,
+    index: number,
+    properties?: CharacterProperties
+  ): Character {
     if (index < 0 || index > this.characters.length) {
       throw new Error("Invalid index");
     }
@@ -173,7 +185,7 @@ class CRDT {
     );
 
     const id = generateShortUUID(8);
-    const char = new Character(id, value, position, this.siteId, this.clock++);
+    const char = new Character(id, value, position, this.siteId, this.clock++, false, properties);
     const insertIndex = this.findInsertIndex(char);
     this.characters.splice(insertIndex, 0, char);
 
@@ -200,8 +212,11 @@ class CRDT {
     }
 
     this.characters.splice(index, 0, characterInstance);
-    
-    if (characterInstance.siteId === this.siteId && characterInstance.clock >= this.clock) {
+
+    if (
+      characterInstance.siteId === this.siteId &&
+      characterInstance.clock >= this.clock
+    ) {
       this.clock = characterInstance.clock + 1;
     }
 
@@ -230,7 +245,7 @@ class CRDT {
 
   getState(): Character[] {
     return sortBy([...this.characters], (char) => {
-      const pos = char.position.join(',');
+      const pos = char.position.join(",");
       return `${pos}-${char.siteId}-${char.clock}`;
     });
   }

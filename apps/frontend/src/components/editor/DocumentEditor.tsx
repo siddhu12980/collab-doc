@@ -5,7 +5,17 @@ import docAPi from "../../services/mockApi";
 
 import { Document } from "../../types/auth";
 import { calculateCursorPosition } from "../../utils/cursor";
-import { CRDT } from "../../sync/sync";
+import { CharacterProperties, CRDT } from "../../sync/sync";
+import {
+  Bold,
+  Heading,
+  HighlighterIcon,
+  Italic,
+  ParkingSquareIcon,
+  Strikethrough,
+  Underline,
+} from "lucide-react";
+import PropertiesBar from "./PropertiesBar";
 
 enum MESSAGE_TYPE {
   JOIN = "join",
@@ -61,6 +71,8 @@ export default function DocumentEditor() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const [crdt, setCrdt] = useState<CRDT | null>(null);
+
+  const [properties, setProperties] = useState<CharacterProperties>({});
 
   async function getDocData(documentId: string) {
     try {
@@ -238,7 +250,6 @@ export default function DocumentEditor() {
 
     if (data.type === "insert") {
       const index = crdt.integrate(data.character);
-  
 
       console.log("Character added at index successfully:", index);
       if (index == -1) {
@@ -314,7 +325,7 @@ export default function DocumentEditor() {
     if (!diff) return;
 
     if (diff.type === "insert") {
-      const char = crdt.insert(diff.chars, diff.index);
+      const char = crdt.insert(diff.chars, diff.index, properties);
       setContent(crdt.toString());
 
       const message = JSON.stringify({
@@ -473,8 +484,15 @@ export default function DocumentEditor() {
         </div>
       </header>
 
+      <PropertiesBar
+        onPropertiesChange={(properties) => {
+          console.log("Properties changed:", properties);
+          setProperties(properties);
+        }}
+      />
+
       <div
-        className={` w-[80%] mx-auto bg-gray-800 rounded-lg shadow-lg p-2  relative    ${
+        className={` w-[80%] mx-auto bg-gray-800 rounded-lg shadow-lg   relative    ${
           canEdit ? "cursor-text" : "cursor-not-allowed disabled:opacity-50"
         }          `}
       >
