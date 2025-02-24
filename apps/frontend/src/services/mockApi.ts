@@ -1,7 +1,8 @@
 import axios from "axios";
 import { Document } from "../types/auth";
-
-const baseUrl = "http://localhost:3000";
+import { Character } from "../sync/sync";
+import { API_URL } from "../config/constants";
+const baseUrl = API_URL;
 
 export const docAPi = {
   getToken: async (): Promise<string | null> => {
@@ -95,7 +96,11 @@ export const docAPi = {
 
   updateDoc: async (
     docID: string,
-    newTitle: string
+    newTitle?: string,
+    newContent?: string,
+    newCharacters?: Character[],
+    newVersion?: number,
+    newLastUpdateID?: string
   ): Promise<Document | void> => {
     try {
       const token = await docAPi.getToken();
@@ -109,6 +114,10 @@ export const docAPi = {
         `${baseUrl}/docs/${docID}`,
         {
           title: newTitle,
+          content: newContent,
+          characters: newCharacters,
+          version: newVersion,
+          lastUpdateID: newLastUpdateID,
         },
         {
           headers: {

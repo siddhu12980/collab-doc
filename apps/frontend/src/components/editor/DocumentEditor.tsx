@@ -1,51 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { WS_URL } from "../../config/constants";
 import docAPi from "../../services/mockApi";
 
 import { Document } from "../../types/auth";
 import { calculateCursorPosition } from "../../utils/cursor";
-import { CharacterProperties, CRDT } from "../../sync/sync";
-import {
-  Bold,
-  Heading,
-  HighlighterIcon,
-  Italic,
-  ParkingSquareIcon,
-  Strikethrough,
-  Underline,
-} from "lucide-react";
-import PropertiesBar from "./PropertiesBar";
+import {  Character, CRDT } from "../../sync/sync";
+import { ACtiveUser, MESSAGE_TYPE, Display_Cursor_Color } from "./model";
 
-enum MESSAGE_TYPE {
-  JOIN = "join",
-  SERVER = "server",
-  ERROR = "error",
-  RESPONSE = "response",
-  LEAVE = "leave",
-  UPDATE = "update",
-  CURSOR_UPDATE = "cursorUpdate",
-}
-enum Display_Cursor_Color {
-  RED = "red",
-  GREEN = "green",
-  YELLOW = "yellow",
-  PURPLE = "purple",
-  ORANGE = "orange",
-  PINK = "pink",
-  WHITE = "white",
-}
-
-interface ACtiveUser {
-  id: string;
-  email?: string;
-  username: string;
-  cursor_position?: {
-    anchor?: number;
-    head?: number;
-  };
-  displaycolor?: Display_Cursor_Color;
-}
 
 export default function DocumentEditor() {
   const { id } = useParams<{ id: string }>();
@@ -72,8 +34,14 @@ export default function DocumentEditor() {
 
   const [crdt, setCrdt] = useState<CRDT | null>(null);
 
-  const [properties, setProperties] = useState<CharacterProperties>({});
+  const [saveTimeout, setSaveTimeout] = useState<NodeJS.Timeout | null>(null);
 
+  const navigate = useNavigate();
+
+
+  console.log("token", token);
+
+  
   async function getDocData(documentId: string) {
     try {
       const docData = await docAPi.getDoc(documentId);
@@ -82,11 +50,61 @@ export default function DocumentEditor() {
         return;
       }
       setDoc(docData);
-      setContent(docData.content);
+
+      if (docData.characters && crdt) {
+        crdt.reset();
+        
+        // Sort characters by position and clock before integrating
+        const sortedChars = [...docData.characters].sort((a, b) => {
+          const posA = a.position.join(',');
+          const posB = b.position.join(',');
+          if (posA !== posB) return posA.localeCompare(posB);
+          if (a.siteId !== b.siteId) return a.siteId.localeCompare(b.siteId);
+          return a.clock - b.clock;
+        });
+
+        for (const char of sortedChars) {
+          crdt.integrateFromDB(char);
+        }
+
+        setContent(crdt.toString());
+      }
     } catch (error) {
       console.error("Error fetching document:", error);
     }
   }
+
+  const saveToDatabase = async () => {
+    if (!doc || !crdt) return;
+
+    try {
+      const characters = crdt.getState().map(char => new Character(
+        char.id,
+        char.value,
+        char.position,
+        char.siteId,
+        char.clock,
+        char.deleted,
+        char.properties
+      ));
+
+      const currentContent = crdt.toString();
+      const result = await docAPi.updateDoc(
+        doc.id, 
+        doc.title, 
+        currentContent, 
+        characters,
+        doc.version + 1, 
+        crdt.getID()
+      );
+
+      if (result) {
+        setDoc(prev => prev ? { ...prev, version: prev.version + 1 } : null);
+      }
+    } catch (error) {
+      console.error("Error saving document:", error);
+    }
+  };
 
   const handleSelect = (e: React.SyntheticEvent<HTMLTextAreaElement>) => {
     const target = e.target as HTMLTextAreaElement;
@@ -128,18 +146,14 @@ export default function DocumentEditor() {
 
       if (!token || !authData || !id) {
         console.error("Missing required session data");
-        return false;
+        return;
       }
 
       try {
         const parsedAuthData = JSON.parse(authData);
-        if (
-          !parsedAuthData?.id ||
-          !parsedAuthData?.email ||
-          !parsedAuthData?.username
-        ) {
+        if (!parsedAuthData?.id || !parsedAuthData?.email || !parsedAuthData?.username) {
           console.error("Invalid user data");
-          return false;
+          return;
         }
 
         setMyUser({
@@ -148,56 +162,48 @@ export default function DocumentEditor() {
           username: parsedAuthData.username,
         });
 
-        const crdt = CRDT.getInstance(parsedAuthData.id);
-        setCrdt(crdt);
-
-        return { token, parsedAuthData, documentId: id };
+        const newCrdt = CRDT.getInstance(parsedAuthData.id);
+        setCrdt(newCrdt);
+        setToken(token);
       } catch (error) {
         console.error("Error parsing auth data:", error);
-        return false;
       }
     };
 
-    const sessionData = initializeUserSession();
-
-    if (!sessionData || !sessionData.parsedAuthData) {
-      console.error("Failed to initialize user session");
-      return;
-    }
-
-    console.log("Session data:", sessionData);
-    console.log("crdt:", crdt);
-
-    if (sessionData) {
-      getDocData(sessionData.documentId);
-      initializeWebSocket(sessionData.token, sessionData.documentId);
-      setToken(sessionData.token);
-    }
+    initializeUserSession();
   }, [id]);
 
   useEffect(() => {
-    console.log("Running Second effect:", crdt);
-    if (!token || !id) {
-      return;
-    }
-
-    if (!crdt) {
-      console.error("CRDT not initialized");
-      return;
-    }
-
-    const c = CRDT.getInstance(myUser?.id!);
-
-    setCrdt(c);
-
+    if (!token || !id || !crdt) return;
+    
+    console.log("Initializing WebSocket with token and CRDT ready");
     initializeWebSocket(token, id);
-  }, [token]);
+
+    return () => {
+      if (socket) {
+        socket.close();
+      }
+    };
+  }, [token, id, crdt]);
+
+  // New useEffect for document data
+  useEffect(() => {
+    if (!id || !crdt) return;
+    
+    console.log("Fetching doc data with CRDT:", crdt);
+    getDocData(id);
+  }, [id, crdt]);
 
   const initializeWebSocket = (token: string, documentId: string) => {
-    if (!token || !crdt) {
+    console.log("Initializing WebSocket with token:", token, "and documentId:", documentId);
+
+    if (!token) {
       console.error("Missing required data for WebSocket initialization");
       return;
     }
+
+ 
+
     const ws = new WebSocket(WS_URL);
 
     ws.onopen = () => {
@@ -233,50 +239,39 @@ export default function DocumentEditor() {
 
   const handleContentUpdate = (datas: any) => {
     const data = datas.data;
+    if (!crdt || !textareaRef.current) return;
 
-    console.log("Content update:", data);
-
-    console.log("CRDT:", crdt);
-
-    if (!crdt) {
-      console.error("CRDT not initialized");
-      return;
-    }
-
-    if (!textareaRef.current) {
-      console.error("Textarea not initialized");
-      return;
-    }
+    // Ensure we're not processing our own updates
+    if (data.sourceSiteId === crdt.getID()) return;
 
     if (data.type === "insert") {
       const index = crdt.integrate(data.character);
-
-      console.log("Character added at index successfully:", index);
-      if (index == -1) {
-        console.error("Char Adding Failed");
-        return;
+      if (index !== -1) {
+        const currentCursor = textareaRef.current.selectionStart;
+        setContent(crdt.toString());
+        textareaRef.current.selectionStart = currentCursor;
+        textareaRef.current.selectionEnd = currentCursor;
       }
-
-      setContent(crdt.toString());
     } else if (data.type === "delete") {
-      const state = crdt.getState();
-
-      const index = state.findIndex(
-        (char) =>
+      // Find the character by siteId and clock
+      const charToDelete = crdt.getState().find(
+        char => 
+          char.siteId === data.character.siteId && 
           char.clock === data.character.clock &&
-          char.siteId === data.character.siteId
+          !char.deleted
       );
 
-      if (index !== -1) {
-        crdt.delete(index);
+      if (charToDelete) {
+        charToDelete.deleted = true;
+        const currentCursor = textareaRef.current.selectionStart;
+        setContent(crdt.toString());
+        textareaRef.current.selectionStart = currentCursor;
+        textareaRef.current.selectionEnd = currentCursor;
       }
-
-      setContent(crdt.toString());
     }
   };
 
   const findTextDiff = (oldStr: string, newStr: string) => {
-    // If strings are equal, no changes
     if (oldStr === newStr) return null;
 
     let i = 0;
@@ -287,23 +282,23 @@ export default function DocumentEditor() {
 
     // Handle insertions
     if (newStr.length > oldStr.length) {
+      const char = newStr[i];
+      // Special handling for newline character
+      if (char === '\n') {
+        return {
+          type: "insert" as const,
+          index: i,
+          chars: '\n'
+        };
+      }
       return {
         type: "insert" as const,
         index: i,
-        chars: newStr[i],
+        chars: char
       };
     }
 
     // Handle deletions
-    if (newStr.length < oldStr.length) {
-      return {
-        type: "delete" as const,
-        index: i,
-      };
-    }
-
-    // If lengths are equal but strings are different,
-    // handle as a deletion (the subsequent change will handle the insertion)
     return {
       type: "delete" as const,
       index: i,
@@ -317,15 +312,13 @@ export default function DocumentEditor() {
     }
 
     const newText = e.target.value;
-
     if (newText === content) return;
 
     const diff = findTextDiff(content, newText);
-
     if (!diff) return;
 
     if (diff.type === "insert") {
-      const char = crdt.insert(diff.chars, diff.index, properties);
+      const char = crdt.insert(diff.chars, diff.index);
       setContent(crdt.toString());
 
       const message = JSON.stringify({
@@ -344,9 +337,9 @@ export default function DocumentEditor() {
       }
     } else if (diff.type === "delete") {
       const char = crdt.delete(diff.index);
-
       if (char) {
-        setContent(crdt.toString());
+        const newContent = crdt.toString();
+        setContent(newContent);
 
         const message = JSON.stringify({
           type: MESSAGE_TYPE.UPDATE,
@@ -356,6 +349,7 @@ export default function DocumentEditor() {
             type: "delete",
             character: char,
             sourceSiteId: crdt.getID(),
+            index: diff.index,
           },
         });
 
@@ -364,6 +358,11 @@ export default function DocumentEditor() {
         }
       }
     }
+
+    if (saveTimeout) {
+      clearTimeout(saveTimeout);
+    }
+    setSaveTimeout(setTimeout(saveToDatabase, 1000));
   };
 
   const handleWebSocketMessage = (data: any) => {
@@ -444,14 +443,43 @@ export default function DocumentEditor() {
     );
   };
 
+  useEffect(() => {
+    return () => {
+      if (saveTimeout) {
+        clearTimeout(saveTimeout);
+      }
+    };
+  }, [saveTimeout]);
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const adjustHeight = () => {
+      textarea.style.height = 'auto';
+      textarea.style.height = textarea.scrollHeight + 'px';
+    };
+
+    // Adjust on content change
+    adjustHeight();
+
+    // Add event listener for manual input
+    textarea.addEventListener('input', adjustHeight);
+
+    return () => {
+      textarea.removeEventListener('input', adjustHeight);
+    };
+  }, [content]);
+
   return (
     <div className="flex flex-col min-h-screen bg-gray-900 gap-8">
       <header className="bg-gray-800 shadow-lg p-4">
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
+        <div className="max-w-7xl mx-auto flex justify-between items-center  cursor-pointer   ">
           <h1
             onClick={() => {
-              console.log("Clicked", crdt?.getState());
+              navigate(`/`);
             }}
+
             className="text-2xl font-bold text-white truncate"
           >
             {doc?.title || "Loading..."}
@@ -484,20 +512,13 @@ export default function DocumentEditor() {
         </div>
       </header>
 
-      <PropertiesBar
-        onPropertiesChange={(properties) => {
-          console.log("Properties changed:", properties);
-          setProperties(properties);
-        }}
-      />
-
       <div
-        className={` w-[80%] mx-auto bg-gray-800 rounded-lg shadow-lg   relative    ${
+        className={`w-full max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 flex-grow ${
           canEdit ? "cursor-text" : "cursor-not-allowed disabled:opacity-50"
-        }          `}
+        }`}
       >
         <div
-          className="relative min-h-[16rem] bg-white dark:bg-gray-900 rounded-lg"
+          className="relative w-full bg-white dark:bg-gray-900 rounded-lg shadow-lg overflow-hidden"
           ref={containerRef}
         >
           <textarea
@@ -505,44 +526,51 @@ export default function DocumentEditor() {
             value={content}
             onChange={handleTextChange}
             onSelect={handleSelect}
-            className="w-full h-full min-h-[16rem] p-4 bg-transparent text-gray-900 
-               dark:text-gray-100 font-mono resize-none outline-none border 
-               border-gray-200 dark:border-gray-700 rounded-lg"
+            className="w-full p-4 sm:p-6 bg-transparent text-base sm:text-lg 
+              dark:text-gray-100 font-mono outline-none border-none
+              rounded-lg whitespace-pre-wrap overflow-hidden
+              leading-relaxed resize-none"
+            style={{ 
+              height: 'auto',
+              minHeight: '16rem',
+              maxHeight: '80vh'
+            }}
             placeholder="Start typing..."
             spellCheck="false"
           />
-          {activeUsers.map((user) => {
-            const { top, left } = calculateCursorPosition(
-              user.cursor_position?.head!,
-              textareaRef.current,
-              containerRef.current
-            );
-            return (
-              <div
-                key={user.id}
-                className="absolute pointer-events-none transform"
-                style={{
-                  left: `${left}px`,
-                  top: `${top}px`,
-                  color: user.displaycolor,
-                  zIndex: 20,
-                }}
-              >
-                <div className="relative">
-                  <span
-                    className="absolute -top-5 whitespace-nowrap text-xs bg-gray-800 
-                         px-1.5 py-0.5 rounded"
-                  >
-                    {user.username}
-                  </span>
-                  <div
-                    className="w-0.5 h-5 animate-pulse"
-                    style={{ backgroundColor: user.displaycolor }}
-                  />
+
+          <div className="absolute inset-0 pointer-events-none">
+            {activeUsers.map((user) => {
+              const { top, left } = calculateCursorPosition(
+                user.cursor_position?.head!,
+                textareaRef.current,
+                containerRef.current
+              );
+              return (
+                <div
+                  key={user.id}
+                  className="absolute transform"
+                  style={{
+                    left: `${left}px`,
+                    top: `${top}px`,
+                    color: user.displaycolor,
+                    zIndex: 20,
+                  }}
+                >
+                  <div className="relative">
+                    <span className="absolute -top-5 whitespace-nowrap text-xs bg-gray-800 
+                      px-1.5 py-0.5 rounded">
+                      {user.username}
+                    </span>
+                    <div
+                      className="w-0.5 h-5 animate-pulse"
+                      style={{ backgroundColor: user.displaycolor }}
+                    />
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>

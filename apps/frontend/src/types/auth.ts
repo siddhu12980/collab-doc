@@ -1,3 +1,5 @@
+import { Character } from "../sync/sync";
+
 export interface User {
   id: string;
   email: string;
@@ -17,6 +19,8 @@ export interface Document {
   code: string;
   createdAt: string;
   ownerId: string;
+  characters: Character[];
+  version: number;
 }
 
 export interface UpdateDocument {

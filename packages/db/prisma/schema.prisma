@@ -30,6 +30,24 @@ model Sheet {
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   events       Event[]
   lastUpdateID String?
+  characters   Character[]
+  version      Int      @default(0)
+}
+
+model Character {
+  id         String   @id
+  value      String
+  position   Int[]
+  siteId     String
+  clock      Int
+  deleted    Boolean  @default(false)
+  properties Json?
+  sheetId    String
+  sheet      Sheet    @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@index([sheetId])
+  @@index([siteId, clock])
 }
 
 model Event {
@@ -41,10 +59,17 @@ model Event {
   sheet     Sheet    @relation(fields: [sheetId], references: [id], onDelete: Cascade)
   column    Int
   line      Int
+  operation CRDTOperation?
 }
 
 enum EditType {
   INSERT
   DELETE
   UPDATE
+}
+
+enum CRDTOperation {
+  INSERT
+  DELETE
+  UPDATE_PROPERTIES
 }

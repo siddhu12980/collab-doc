@@ -38,11 +38,13 @@ app.post("/auth/signup", Signup);
 app.get("/join", token, joinSheet);
 
 app.get("/docs/all", token, getAllSheet);
+
 app.post("/docs", token, CreateSheet);
 
 app.get("/docs/:id", token, getSheet);
 
 app.delete("/docs/:id", token, deletSheet);
+
 app.put("/docs/:id", token, updateSheet);
 
 app.get("/sheet/event", getSheetEvent);

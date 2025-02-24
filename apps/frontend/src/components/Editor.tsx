@@ -2,8 +2,8 @@ import React, { useEffect, useRef, useState } from "react";
 import { User, EditorState, EditorMessage } from "../types/editor";
 import { getRandomColor } from "../utils/colors";
 import { calculateCursorPosition } from "../utils/cursor";
+import { WS_URL } from "../config/constants";
 
-const WS_URL = "ws://localhost:8081";
 
 export default function Editor() {
   const [state, setState] = useState<EditorState>({

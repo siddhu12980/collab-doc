@@ -249,6 +249,9 @@ export async function getSheet(req: Request, res: Response) {
         title: true,
         content: true,
         slug: true,
+        characters: true,
+        lastUpdateID: true,
+        version: true,
         user: {
           select: {
             id: true,
@@ -293,40 +296,92 @@ export async function deletSheet(req: Request, res: Response) {
   }
 }
 
+interface CRDTCharacter {
+  id: string;
+  value: string;
+  position: number[];
+  siteId: string;
+  clock: number;
+  deleted: boolean;
+  properties?: Record<string, any>;
+}
+
 interface UpdateSheetBody {
   title?: string;
   content?: string;
   lastUpdateId?: string;
+  characters?: CRDTCharacter[];
+  version?: number;
 }
 
 export async function updateSheet(req: Request, res: Response) {
   try {
     const body = req.body;
-
-    //parse body
-
-    const { title, content, lastUpdateId } = body as UpdateSheetBody;
-
     const sheetId = req.params.id;
 
     if (!sheetId) {
-      res.status(400).send("Sheet id is required");
-      return;
+      return res.status(400).send("Sheet id is required");
     }
 
-    const sheet = await prisma.sheet.update({
-      where: {
-        id: sheetId,
-      },
-      data: {
-        ...body,
-      },
+    // Start a transaction to ensure data consistency
+    const result = await prisma.$transaction(async (tx) => {
+      // First check if sheet exists
+      const sheet = await tx.sheet.findUnique({
+        where: { id: sheetId }
+      });
+
+      if (!sheet) {
+        throw new Error("Sheet not found");
+      }
+
+      // Update sheet first
+      const updatedSheet = await tx.sheet.update({
+        where: { id: sheetId },
+        data: {
+          title: body.title,
+          content: body.content,
+          lastUpdateID: body.lastUpdateId,
+          version: { increment: 1 }
+        }
+      });
+
+      // If characters are provided, update them
+      if (body.characters && Array.isArray(body.characters)) {
+        // Delete existing characters
+        await tx.character.deleteMany({
+          where: { sheetId }
+        });
+
+        console.log("Characters", body.characters);
+        // Insert new characters in batches
+        const batchSize = 1000;
+        for (let i = 0; i < body.characters.length; i += batchSize) {
+          const batch = body.characters.slice(i, i + batchSize);
+          await tx.character.createMany({
+            data: batch.map((char: CRDTCharacter) => ({
+              id: char.id,
+              sheetId: sheetId,
+              value: char.value,
+              position: char.position,
+              siteId: char.siteId,
+              clock: char.clock,
+              deleted: char.deleted,
+              properties: char.properties || {}
+            }))
+          });
+        }
+      }
+
+      return updatedSheet;
     });
 
-    res.status(200).send(sheet);
+    return res.status(200).json(result);
   } catch (error) {
-    res.status(500).send("Internal server error");
-    return;
+    console.error("Error updating sheet:", error);
+    return res.status(500).json({ 
+      error: "Internal server error",
+      details: error instanceof Error ? error.message : "Unknown error"
+    });
   }
 }
 
